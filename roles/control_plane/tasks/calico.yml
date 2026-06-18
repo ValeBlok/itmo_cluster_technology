@@ -1,0 +1,41 @@
+---
+- name: Установить Tigera Operator
+  ansible.builtin.command: >
+    kubectl create -f
+    https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/tigera-operator.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: tigera
+  changed_when: "'created' in tigera.stdout"
+  failed_when: tigera.rc != 0 and 'already exists' not in tigera.stderr
+
+- name: Сгенерировать Installation CR для Calico
+  ansible.builtin.copy:
+    dest: /etc/kubernetes/calico-installation.yaml
+    mode: "0644"
+    content: |
+      apiVersion: operator.tigera.io/v1
+      kind: Installation
+      metadata:
+        name: default
+      spec:
+        calicoNetwork:
+          ipPools:
+            - blockSize: 26
+              cidr: {{ pod_network_cidr }}
+              encapsulation: VXLANCrossSubnet
+              natOutgoing: Enabled
+              nodeSelector: all()
+      ---
+      apiVersion: operator.tigera.io/v1
+      kind: APIServer
+      metadata:
+        name: default
+      spec: {}
+
+- name: Применить Calico Installation CR
+  ansible.builtin.command: kubectl apply -f /etc/kubernetes/calico-installation.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: calico_apply
+  changed_when: "'created' in calico_apply.stdout or 'configured' in calico_apply.stdout"

@@ -1,0 +1,19 @@
+---
+- name: Проверить, присоединена ли нода
+  ansible.builtin.stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf
+
+- name: Присоединить ноду к кластеру (kubeadm join)
+  ansible.builtin.command: "{{ hostvars[groups['control_plane'][0]].worker_join_command }} --cri-socket {{ container_runtime_socket }}"
+  when: not kubelet_conf.stat.exists
+  register: kubeadm_join
+  changed_when: kubeadm_join.rc == 0
+
+- name: Промаркировать ноду ролью worker
+  ansible.builtin.command: >
+    kubectl --kubeconfig /etc/kubernetes/admin.conf
+    label node {{ inventory_hostname }}
+    node-role.kubernetes.io/worker=worker --overwrite
+  delegate_to: "{{ groups['control_plane'][0] }}"
+  changed_when: false

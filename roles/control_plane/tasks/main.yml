@@ -1,0 +1,64 @@
+---
+- name: Проверить, инициализирован ли кластер
+  ansible.builtin.stat:
+    path: /etc/kubernetes/admin.conf
+  register: admin_conf
+
+- name: Определить точную версию kubeadm
+  ansible.builtin.command: kubeadm version -o short
+  register: kubeadm_ver_raw
+  changed_when: false
+
+- name: Сохранить версию kubeadm в факт
+  ansible.builtin.set_fact:
+    kubeadm_version: "{{ kubeadm_ver_raw.stdout }}"
+
+- name: Сгенерировать kubeadm-config.yaml
+  ansible.builtin.template:
+    src: kubeadm-config.yaml.j2
+    dest: /etc/kubernetes/kubeadm-config.yaml
+    mode: "0644"
+
+- name: kubeadm init (инициализация control-plane)
+  ansible.builtin.command: >
+    kubeadm init
+    --config /etc/kubernetes/kubeadm-config.yaml
+    --upload-certs
+    {{ '--skip-phases=addon/kube-proxy' if (cni == 'cilium' and cilium_kube_proxy_replacement) else '' }}
+  args:
+    creates: /etc/kubernetes/admin.conf
+  register: kubeadm_init
+
+- name: Создать ~/.kube для пользователя {{ ansible_user }}
+  ansible.builtin.file:
+    path: "/home/{{ ansible_user }}/.kube"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+
+- name: Скопировать admin.conf в ~/.kube/config
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "/home/{{ ansible_user }}/.kube/config"
+    remote_src: true
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0600"
+
+- name: Установить CNI Cilium
+  ansible.builtin.include_tasks: cilium.yml
+  when: cni == "cilium"
+
+- name: Установить CNI Calico
+  ansible.builtin.include_tasks: calico.yml
+  when: cni == "calico"
+
+- name: Сгенерировать join-команду для воркеров
+  ansible.builtin.command: kubeadm token create --print-join-command
+  register: join_cmd_raw
+  changed_when: false
+
+- name: Сохранить join-команду в факт control-plane ноды
+  ansible.builtin.set_fact:
+    worker_join_command: "{{ join_cmd_raw.stdout }}"

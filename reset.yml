@@ -1,0 +1,32 @@
+---
+# использовать, если нужно начать заново
+- name: Сброс кластера Kubernetes
+  hosts: k8s_cluster
+  gather_facts: false
+  tasks:
+    - name: kubeadm reset
+      ansible.builtin.command: kubeadm reset -f
+      ignore_errors: true
+      changed_when: false
+
+    - name: Очистить каталоги конфигурации
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/kubernetes
+        - /var/lib/etcd
+        - /etc/cni/net.d
+        - "/home/{{ ansible_user }}/.kube"
+        - /root/.kube
+
+    - name: Сбросить правила iptables
+      ansible.builtin.shell: |
+        iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X || true
+      changed_when: false
+
+    - name: Перезапустить containerd
+      ansible.builtin.systemd:
+        name: containerd
+        state: restarted
+      ignore_errors: true

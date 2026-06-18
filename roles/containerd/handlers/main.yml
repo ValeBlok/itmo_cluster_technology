@@ -1,0 +1,6 @@
+---
+- name: Перезапустить containerd
+  ansible.builtin.systemd:
+    name: containerd
+    state: restarted
+    daemon_reload: true

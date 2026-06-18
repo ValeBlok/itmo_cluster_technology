@@ -1,0 +1,24 @@
+---
+kubernetes_minor: "1.30"
+
+cni: cilium # или calico
+
+# сеть кластера
+pod_network_cidr: "10.244.0.0/16"
+service_cidr: "10.96.0.0/12"
+
+# Endpoint API-сервера. По умолчанию это IP первой control-plane ноды
+# Менять не нужно, считается автоматически из inventory
+control_plane_endpoint: "{{ hostvars[groups['control_plane'][0]].ansible_host }}"
+api_advertise_address: "{{ hostvars[groups['control_plane'][0]].ansible_host }}"
+
+# сокет container runtime (containerd)
+container_runtime_socket: "unix:///run/containerd/containerd.sock"
+
+# cilium
+cilium_version: "1.15.6"
+# cilium_kube_proxy_replacement отвечает за включение/выключение kube-proxy
+cilium_kube_proxy_replacement: false
+
+# используется только если cni: calico
+calico_version: "v3.28.0"
